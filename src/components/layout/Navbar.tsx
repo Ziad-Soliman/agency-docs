@@ -4,7 +4,8 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
 import { LiveSyncStatus } from "./LiveSyncStatus";
-import { Search, Menu, X, ChevronRight, Home, ExternalLink } from "lucide-react";
+import { ReaderSettings } from "@/components/ui/ReaderSettings";
+import { Search, Menu, X, ChevronRight, Home, Share2 } from "lucide-react";
 import { NavNode } from "@/lib/types";
 import { Sidebar } from "./Sidebar";
 
@@ -14,6 +15,13 @@ interface NavbarProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   currentPageTitle?: string;
+  onOpenShare?: () => void;
+  fontSize: "sm" | "base" | "lg";
+  onChangeFontSize: (size: "sm" | "base" | "lg") => void;
+  isFocusMode: boolean;
+  onToggleFocusMode: () => void;
+  dirOverride: "auto" | "rtl" | "ltr";
+  onChangeDirOverride: (dir: "auto" | "rtl" | "ltr") => void;
 }
 
 export function Navbar({
@@ -22,6 +30,13 @@ export function Navbar({
   onRefresh,
   isRefreshing,
   currentPageTitle,
+  onOpenShare,
+  fontSize,
+  onChangeFontSize,
+  isFocusMode,
+  onToggleFocusMode,
+  dirOverride,
+  onChangeDirOverride,
 }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -51,7 +66,7 @@ export function Navbar({
               {currentPageTitle && (
                 <>
                   <ChevronRight className="w-3 h-3 text-zinc-400 flex-shrink-0" />
-                  <span className="text-zinc-900 dark:text-zinc-100 font-medium truncate">
+                  <span className="text-zinc-900 dark:text-zinc-100 font-medium truncate max-w-[200px] sm:max-w-[320px]">
                     {currentPageTitle}
                   </span>
                 </>
@@ -59,20 +74,41 @@ export function Navbar({
             </div>
           </div>
 
-          {/* Right: Search shortcut + Live sync badge + Theme toggle */}
-          <div className="flex items-center gap-3">
+          {/* Right Controls */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onOpenSearch}
               className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-100/80 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-xs text-zinc-400 hover:border-indigo-500/50 hover:text-zinc-600 dark:hover:text-zinc-200 transition-all shadow-sm"
             >
               <Search className="w-3.5 h-3.5" />
-              <span>Quick search...</span>
+              <span>Search docs...</span>
               <kbd className="px-1.5 py-0.5 rounded bg-zinc-200/80 dark:bg-zinc-800 text-[10px] font-mono">
                 ⌘K
               </kbd>
             </button>
 
+            {onOpenShare && (
+              <button
+                onClick={onOpenShare}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium transition-all active:scale-95 border border-zinc-200/60 dark:border-zinc-700/60"
+                title="Share Document"
+              >
+                <Share2 className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Share</span>
+              </button>
+            )}
+
             <LiveSyncStatus onRefresh={onRefresh} isRefreshing={isRefreshing} />
+
+            <ReaderSettings
+              fontSize={fontSize}
+              onChangeFontSize={onChangeFontSize}
+              isFocusMode={isFocusMode}
+              onToggleFocusMode={onToggleFocusMode}
+              dirOverride={dirOverride}
+              onChangeDirOverride={onChangeDirOverride}
+            />
+
             <ThemeToggle />
           </div>
         </div>

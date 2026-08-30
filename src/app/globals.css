@@ -60,5 +60,46 @@ pre, code, kbd {
 [dir="rtl"] {
   text-align: right;
   font-family: 'Cairo', var(--font-geist-sans), system-ui, sans-serif;
-  line-height: 1.8;
+  line-height: 1.85;
+}
+
+/* Disable drag on images */
+img {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-select: none;
+}
+
+/* Security: Block Print & Watermark Protection */
+@media print {
+  html, body {
+    height: 100% !important;
+    overflow: hidden !important;
+    background: #000000 !important;
+    color: #ffffff !important;
+  }
+  
+  body * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body::before {
+    content: "🔒 PRINT RESTRICTED — This documentation is confidential and protected by New Agency Egypt.";
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 100vh;
+    padding: 40px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #ef4444;
+    font-family: system-ui, sans-serif;
+    border: 3px dashed #ef4444;
+    margin: 40px;
+  }
 }

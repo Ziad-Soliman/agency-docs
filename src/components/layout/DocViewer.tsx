@@ -7,6 +7,11 @@ import { Navbar } from "./Navbar";
 import { Sidebar } from "./Sidebar";
 import { TableOfContents } from "./TableOfContents";
 import { SearchModal } from "@/components/search/SearchModal";
+import { ReadingProgressBar } from "@/components/ui/ReadingProgressBar";
+import { BackToTop } from "@/components/ui/BackToTop";
+import { FeedbackWidget } from "@/components/ui/FeedbackWidget";
+import { ShareModal } from "@/components/ui/ShareModal";
+import { useToast } from "@/components/ui/Toast";
 import {
   formatNotionDate,
   estimateReadingTime,
@@ -23,9 +28,9 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
-  RefreshCw,
   Share2,
   Check,
+  History,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -40,12 +45,34 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
   const [blocks, setBlocks] = useState<NotionBlock[]>(initialBlocks);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const { showToast } = useToast();
+
+  // Reader Settings State
+  const [fontSize, setFontSize] = useState<"sm" | "base" | "lg">("base");
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [dirOverride, setDirOverride] = useState<"auto" | "rtl" | "ltr">("auto");
+
+  // Recent History
+  const [recentPages, setRecentPages] = useState<Array<{ id: string; title: string }>>([]);
 
   // Sync state when props change
   useEffect(() => {
     setPage(initialPage);
     setBlocks(initialBlocks);
+
+    // Save to recent history in localStorage
+    try {
+      const cleanId = cleanPageId(initialPage.id);
+      const saved = JSON.parse(localStorage.getItem("agency_recent_pages") || "[]");
+      const filtered = saved.filter((p: any) => p.id !== cleanId);
+      const updated = [{ id: cleanId, title: initialPage.title }, ...filtered].slice(0, 5);
+      localStorage.setItem("agency_recent_pages", JSON.stringify(updated));
+      setRecentPages(updated);
+    } catch (e) {
+      // localStorage may fail in some environments
+    }
   }, [initialPage, initialBlocks]);
 
   // Live Refresh handler
@@ -58,15 +85,17 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
       if (data.page && data.blocks) {
         setPage(data.page);
         setBlocks(data.blocks);
+        showToast("Documentation successfully refreshed with live Notion data.", "success");
       }
     } catch (e) {
       console.error("Failed to live refresh from Notion:", e);
+      showToast("Could not sync with Notion API. Please check connection.", "warning");
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  // Optional periodic soft check every 30s to keep in sync if edited
+  // Optional periodic soft check every 30s
   useEffect(() => {
     const interval = setInterval(() => {
       handleRefresh();
@@ -115,6 +144,7 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
     if (typeof window !== "undefined") {
       navigator.clipboard.writeText(window.location.href);
       setCopiedLink(true);
+      showToast("Link copied to clipboard", "success");
       setTimeout(() => setCopiedLink(false), 2000);
     }
   };
@@ -157,10 +187,22 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
       ? flatPages[currentPageIndex + 1]
       : null;
 
-  const pageTitleRtl = isRTL(page.title);
+  // Compute text direction
+  const defaultRtl = isRTL(page.title);
+  const activeDirection = dirOverride === "auto" ? (defaultRtl ? "rtl" : "ltr") : dirOverride;
+
+  const fontSizeClass =
+    fontSize === "sm"
+      ? "text-sm leading-relaxed"
+      : fontSize === "lg"
+      ? "text-lg leading-loose"
+      : "text-base leading-relaxed";
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#08080a] text-zinc-900 dark:text-zinc-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+      {/* Top Hairline Reading Progress Bar */}
+      <ReadingProgressBar />
+
       {/* Top Navbar */}
       <Navbar
         tree={tree}
@@ -168,19 +210,32 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
         currentPageTitle={page.title}
+        onOpenShare={() => setShareOpen(true)}
+        fontSize={fontSize}
+        onChangeFontSize={setFontSize}
+        isFocusMode={isFocusMode}
+        onToggleFocusMode={() => setIsFocusMode(!isFocusMode)}
+        dirOverride={dirOverride}
+        onChangeDirOverride={setDirOverride}
       />
 
       {/* Main Layout Area */}
-      <div className="flex-1 max-w-[1600px] w-full mx-auto flex">
-        {/* Left Sidebar Navigation */}
-        <Sidebar
-          tree={tree}
-          onOpenSearch={() => setSearchOpen(true)}
-          className="hidden lg:flex"
-        />
+      <div className="flex-1 max-w-[1600px] w-full mx-auto flex transition-all duration-300">
+        {/* Left Sidebar Navigation (Hidden in Focus Mode) */}
+        {!isFocusMode && (
+          <Sidebar
+            tree={tree}
+            onOpenSearch={() => setSearchOpen(true)}
+            className="hidden lg:flex"
+          />
+        )}
 
         {/* Center Content Canvas */}
-        <main className="flex-1 min-w-0 px-4 sm:px-8 md:px-12 py-8 lg:py-12 max-w-4xl mx-auto">
+        <main
+          className={`flex-1 min-w-0 px-4 sm:px-8 md:px-12 py-8 lg:py-12 mx-auto transition-all duration-300 ${
+            isFocusMode ? "max-w-3xl" : "max-w-4xl"
+          }`}
+        >
           {/* Optional Page Cover Image */}
           {coverUrl && (
             <div className="mb-8 w-full h-48 sm:h-64 rounded-3xl overflow-hidden ring-1 ring-zinc-200/80 dark:ring-zinc-800 shadow-md">
@@ -188,18 +243,41 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
                 src={coverUrl}
                 alt="Page Cover"
                 className="w-full h-full object-cover"
+                draggable="false"
               />
             </div>
           )}
 
+          {/* Recently Viewed History Pills */}
+          {recentPages.length > 1 && (
+            <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1 text-xs text-zinc-400">
+              <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex-shrink-0">
+                <History className="w-3 h-3 text-indigo-500" />
+                <span>Recent:</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                {recentPages.map((rp) => (
+                  <Link
+                    key={rp.id}
+                    href={rp.id === flatPages[0]?.id ? "/" : `/p/${rp.id}`}
+                    className={`px-2.5 py-1 rounded-lg text-xs transition-all truncate max-w-[150px] ${
+                      rp.id === cleanPageId(page.id)
+                        ? "bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-200/60 dark:border-indigo-800/60"
+                        : "bg-zinc-100 dark:bg-zinc-800/60 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                    }`}
+                  >
+                    {rp.title}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Page Icon & Title Header */}
-          <div className="mb-8">
+          <div className="mb-8" dir={activeDirection}>
             {iconElement && <div className="mb-4">{iconElement}</div>}
 
-            <h1
-              dir={pageTitleRtl ? "rtl" : "ltr"}
-              className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-zinc-950 dark:text-zinc-50 leading-[1.15]"
-            >
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-zinc-950 dark:text-zinc-50 leading-[1.15]">
               {page.title}
             </h1>
 
@@ -256,12 +334,15 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
           </div>
 
           {/* Rendered Notion Blocks Container */}
-          <article className="prose-container">
+          <article className={`prose-container ${fontSizeClass}`} dir={activeDirection}>
             <NotionBlockRenderer blocks={blocks} />
           </article>
 
+          {/* Feedback Rating Widget */}
+          <FeedbackWidget pageTitle={page.title} />
+
           {/* Bottom Prev / Next Navigation */}
-          <div className="mt-16 pt-8 border-t border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="mt-12 pt-8 border-t border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             {prevPage ? (
               <Link
                 href={prevPage.id === flatPages[0]?.id ? "/" : `/p/${prevPage.id}`}
@@ -306,18 +387,30 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
           </div>
         </main>
 
-        {/* Right Sidebar: Table of Contents */}
-        <TableOfContents
-          items={tocItems}
-          readingTime={readingTime}
-          notionUrl={page.url}
-        />
+        {/* Right Sidebar: Table of Contents (Hidden in Focus Mode) */}
+        {!isFocusMode && (
+          <TableOfContents
+            items={tocItems}
+            readingTime={readingTime}
+            notionUrl={page.url}
+          />
+        )}
       </div>
+
+      {/* Floating Back to Top Button */}
+      <BackToTop />
 
       {/* Global Spotlight Search Modal */}
       <SearchModal
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title={page.title}
       />
     </div>
   );

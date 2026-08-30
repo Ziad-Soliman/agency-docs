@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
+import { ToastProvider } from "@/components/ui/Toast";
+import { ProtectionProvider } from "@/components/security/ProtectionProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,7 +29,11 @@ export default function RootLayout({
       </head>
       <body className="antialiased min-h-screen selection:bg-indigo-500 selection:text-white">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
+          <ToastProvider>
+            <ProtectionProvider>
+              {children}
+            </ProtectionProvider>
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

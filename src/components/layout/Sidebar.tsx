@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NavNode } from "@/lib/types";
@@ -11,10 +11,8 @@ import {
   ChevronRight,
   FileText,
   Search,
-  Sparkles,
   ExternalLink,
-  Layers,
-  Compass,
+  Filter,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -23,8 +21,16 @@ interface SidebarProps {
   className?: string;
 }
 
+const CATEGORIES = [
+  { id: "all", label: "All Docs" },
+  { id: "genesis", label: "Founding" },
+  { id: "roadmap", label: "Roadmap" },
+  { id: "catalog", label: "Catalog" },
+];
+
 export function Sidebar({ tree, onOpenSearch, className = "" }: SidebarProps) {
   const pathname = usePathname();
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     root: true,
   });
@@ -37,6 +43,26 @@ export function Sidebar({ tree, onOpenSearch, className = "" }: SidebarProps) {
       [id]: !prev[id],
     }));
   };
+
+  // Filter tree nodes if a specific category is selected
+  const filteredTree = useMemo(() => {
+    if (selectedCategory === "all") return tree;
+
+    return tree.map((root) => {
+      const filteredChildren = root.children?.filter((child) => {
+        const titleLower = child.title.toLowerCase();
+        if (selectedCategory === "genesis") return titleLower.includes("genesis") || titleLower.includes("creative engine");
+        if (selectedCategory === "roadmap") return titleLower.includes("roadmap") || titleLower.includes("خارطة");
+        if (selectedCategory === "catalog") return titleLower.includes("catalog") || titleLower.includes("كتالوج");
+        return true;
+      });
+
+      return {
+        ...root,
+        children: filteredChildren,
+      };
+    });
+  }, [tree, selectedCategory]);
 
   const renderNavNode = (node: NavNode, depth = 0) => {
     const cleanId = cleanPageId(node.id);
@@ -130,14 +156,34 @@ export function Sidebar({ tree, onOpenSearch, className = "" }: SidebarProps) {
             ⌘K
           </kbd>
         </button>
+
+        {/* Category Pills */}
+        <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${
+                selectedCategory === cat.id
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold shadow-xs"
+                  : "bg-zinc-200/60 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Navigation Tree */}
       <div className="flex-1 overflow-y-auto p-3 space-y-1">
-        <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-          Knowledge Base & Pages
+        <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 flex items-center justify-between">
+          <span>Knowledge Base & Pages</span>
+          <span className="text-[9px] font-mono opacity-70">
+            {filteredTree[0]?.children?.length || 0} pages
+          </span>
         </div>
-        {tree.map((rootNode) => renderNavNode(rootNode))}
+        {filteredTree.map((rootNode) => renderNavNode(rootNode))}
       </div>
 
       {/* Bottom Footer Section */}
