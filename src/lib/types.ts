@@ -16,6 +16,7 @@ export interface NotionRichText {
   mention?: {
     type: "user" | "page" | "database" | "date" | "link_preview";
     page?: { id: string };
+    database?: { id: string };
     user?: { id: string; name?: string; avatar_url?: string };
     date?: { start: string; end?: string | null };
   };
@@ -28,10 +29,11 @@ export interface NotionRichText {
 }
 
 export interface NotionIcon {
-  type: "emoji" | "external" | "file";
+  type: "emoji" | "external" | "file" | "icon";
   emoji?: string;
   external?: { url: string };
   file?: { url: string; expiry_time?: string };
+  icon?: { name: string; color: string };
 }
 
 export interface NotionCover {
@@ -42,6 +44,7 @@ export interface NotionCover {
 
 export interface NotionPage {
   id: string;
+  object?: "page" | "database";
   created_time: string;
   last_edited_time: string;
   cover: NotionCover | null;
@@ -62,6 +65,9 @@ export interface NotionPage {
   };
   url: string;
   title: string;
+  isDatabase?: boolean;
+  databaseRows?: any[];
+  databaseSchema?: Record<string, any>;
 }
 
 export interface NotionBlock {
@@ -87,6 +93,7 @@ export interface NavNode {
   children?: NavNode[];
   lastEditedTime: string;
   isRoot?: boolean;
+  isDatabase?: boolean;
 }
 
 export interface TableOfContentsItem {

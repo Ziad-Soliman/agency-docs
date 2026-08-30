@@ -19,7 +19,6 @@ async function notionFetch(endpoint: string, options: RequestInit = {}) {
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
-    // We want dynamic / fresh data on demand
     cache: "no-store",
   });
 
@@ -32,40 +31,22 @@ async function notionFetch(endpoint: string, options: RequestInit = {}) {
   return response.json();
 }
 
-export async function getPage(pageId: string): Promise<NotionPage> {
-  const normalizedId = normalizePageId(pageId);
-  const data = await notionFetch(`/pages/${normalizedId}`);
-
-  let title = "Untitled";
-  if (data.properties) {
-    // Look for title property
-    for (const key of Object.keys(data.properties)) {
-      if (data.properties[key]?.type === "title") {
-        const titleArray = data.properties[key].title as NotionRichText[];
-        title = getPlainTextFromRichText(titleArray) || "Untitled";
-        break;
-      }
-    }
-  }
-
-  return {
-    ...data,
-    id: cleanPageId(data.id),
-    title,
-  };
-}
-
-export async function getBlockChildren(blockId: string): Promise<NotionBlock[]> {
-  const normalizedId = normalizePageId(blockId);
-  const results: NotionBlock[] = [];
+export async function queryDatabase(databaseId: string) {
+  const normalizedId = normalizePageId(databaseId);
+  const rows: any[] = [];
   let cursor: string | undefined = undefined;
 
   while (true) {
-    const query = cursor ? `?page_size=100&start_cursor=${cursor}` : `?page_size=100`;
-    const data = await notionFetch(`/blocks/${normalizedId}/children${query}`);
+    const body: any = { page_size: 100 };
+    if (cursor) body.start_cursor = cursor;
+
+    const data = await notionFetch(`/databases/${normalizedId}/query`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
 
     if (data.results && Array.isArray(data.results)) {
-      results.push(...data.results);
+      rows.push(...data.results);
     }
 
     if (data.has_more && data.next_cursor) {
@@ -73,6 +54,80 @@ export async function getBlockChildren(blockId: string): Promise<NotionBlock[]> 
     } else {
       break;
     }
+  }
+
+  return rows;
+}
+
+export async function getPage(pageId: string): Promise<NotionPage> {
+  const normalizedId = normalizePageId(pageId);
+
+  // Try fetching as page first
+  try {
+    const data = await notionFetch(`/pages/${normalizedId}`);
+
+    let title = "Untitled";
+    if (data.properties) {
+      for (const key of Object.keys(data.properties)) {
+        if (data.properties[key]?.type === "title") {
+          const titleArray = data.properties[key].title as NotionRichText[];
+          title = getPlainTextFromRichText(titleArray) || "Untitled";
+          break;
+        }
+      }
+    }
+
+    return {
+      ...data,
+      id: cleanPageId(data.id),
+      title,
+      isDatabase: false,
+    };
+  } catch (pageError) {
+    // If it failed as a page, try fetching as a database!
+    try {
+      const dbMeta = await notionFetch(`/databases/${normalizedId}`);
+      const title = dbMeta.title ? getPlainTextFromRichText(dbMeta.title) : "Services Catalog";
+      const databaseRows = await queryDatabase(normalizedId);
+
+      return {
+        ...dbMeta,
+        id: cleanPageId(dbMeta.id),
+        title: title || "Services Catalog",
+        isDatabase: true,
+        databaseRows,
+        databaseSchema: dbMeta.properties,
+      };
+    } catch (dbError) {
+      console.error(`Failed to fetch neither page nor database for ${pageId}:`, dbError);
+      throw pageError;
+    }
+  }
+}
+
+export async function getBlockChildren(blockId: string): Promise<NotionBlock[]> {
+  const normalizedId = normalizePageId(blockId);
+  const results: NotionBlock[] = [];
+  let cursor: string | undefined = undefined;
+
+  try {
+    while (true) {
+      const query = cursor ? `?page_size=100&start_cursor=${cursor}` : `?page_size=100`;
+      const data = await notionFetch(`/blocks/${normalizedId}/children${query}`);
+
+      if (data.results && Array.isArray(data.results)) {
+        results.push(...data.results);
+      }
+
+      if (data.has_more && data.next_cursor) {
+        cursor = data.next_cursor;
+      } else {
+        break;
+      }
+    }
+  } catch (e) {
+    // If it's a database, it might not have block children, which is normal
+    return [];
   }
 
   return results;
@@ -83,7 +138,6 @@ export async function getBlocksWithChildren(blockId: string, maxDepth: number = 
 
   if (maxDepth <= 0) return blocks;
 
-  // Process blocks that have children (tables, toggles, columns, callouts, bulleted lists with sub-bullets, synced blocks)
   const populated = await Promise.all(
     blocks.map(async (block) => {
       if (block.has_children && block.type !== "child_page" && block.type !== "child_database") {
@@ -110,26 +164,41 @@ export async function getWorkspaceTree(rootId: string = ROOT_PAGE_ID): Promise<N
     const rootPage = await getPage(rootId);
     const rootChildren = await getBlockChildren(rootId);
 
-    const childPages = rootChildren.filter((b) => b.type === "child_page");
+    // Filter child_page AND child_database blocks!
+    const childNodes = rootChildren.filter(
+      (b) => b.type === "child_page" || b.type === "child_database"
+    );
 
     const subNodes: NavNode[] = await Promise.all(
-      childPages.map(async (cp) => {
+      childNodes.map(async (cp) => {
         const cleanId = cleanPageId(cp.id);
-        const title = cp.child_page?.title || "Untitled";
+        const isDb = cp.type === "child_database";
+        const title = isDb
+          ? cp.child_database?.title || "Services Catalog Database"
+          : cp.child_page?.title || "Untitled";
 
         let nestedChildren: NavNode[] = [];
-        try {
-          const subBlocks = await getBlockChildren(cleanId);
-          const nestedChildPages = subBlocks.filter((b) => b.type === "child_page");
-          nestedChildren = nestedChildPages.map((ncp) => ({
-            id: cleanPageId(ncp.id),
-            title: ncp.child_page?.title || "Untitled",
-            icon: null,
-            hasChildren: false,
-            lastEditedTime: ncp.last_edited_time,
-          }));
-        } catch (e) {
-          console.warn(`Could not fetch subchildren for ${cleanId}`, e);
+        if (!isDb) {
+          try {
+            const subBlocks = await getBlockChildren(cleanId);
+            const nestedChildPages = subBlocks.filter(
+              (b) => b.type === "child_page" || b.type === "child_database"
+            );
+
+            nestedChildren = nestedChildPages.map((ncp) => ({
+              id: cleanPageId(ncp.id),
+              title:
+                ncp.type === "child_database"
+                  ? ncp.child_database?.title || "Database"
+                  : ncp.child_page?.title || "Untitled",
+              icon: ncp.icon || null,
+              hasChildren: false,
+              lastEditedTime: ncp.last_edited_time,
+              isDatabase: ncp.type === "child_database",
+            }));
+          } catch (e) {
+            console.warn(`Could not fetch subchildren for ${cleanId}`, e);
+          }
         }
 
         return {
@@ -139,6 +208,7 @@ export async function getWorkspaceTree(rootId: string = ROOT_PAGE_ID): Promise<N
           hasChildren: nestedChildren.length > 0,
           children: nestedChildren,
           lastEditedTime: cp.last_edited_time,
+          isDatabase: isDb,
         };
       })
     );
@@ -151,6 +221,7 @@ export async function getWorkspaceTree(rootId: string = ROOT_PAGE_ID): Promise<N
       children: subNodes,
       lastEditedTime: rootPage.last_edited_time,
       isRoot: true,
+      isDatabase: false,
     };
 
     return [rootNode];

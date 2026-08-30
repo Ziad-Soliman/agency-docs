@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { NotionBlock, NotionPage, NavNode, TableOfContentsItem } from "@/lib/types";
 import { NotionBlockRenderer } from "@/components/notion/NotionBlockRenderer";
+import { DatabaseView } from "@/components/notion/DatabaseView";
 import { Navbar } from "./Navbar";
 import { Sidebar } from "./Sidebar";
 import { TableOfContents } from "./TableOfContents";
@@ -31,6 +32,7 @@ import {
   Share2,
   Check,
   History,
+  Database,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -71,7 +73,7 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
       localStorage.setItem("agency_recent_pages", JSON.stringify(updated));
       setRecentPages(updated);
     } catch (e) {
-      // localStorage may fail in some environments
+      // localStorage fallback
     }
   }, [initialPage, initialBlocks]);
 
@@ -82,9 +84,9 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
       const res = await fetch(`/api/notion/page/${page.id}`);
       if (!res.ok) throw new Error("Failed to fetch page");
       const data = await res.json();
-      if (data.page && data.blocks) {
+      if (data.page) {
         setPage(data.page);
-        setBlocks(data.blocks);
+        setBlocks(data.blocks || []);
         showToast("Documentation successfully refreshed with live Notion data.", "success");
       }
     } catch (e) {
@@ -164,7 +166,19 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
       iconElement = <img src={page.icon.external.url} alt="icon" className="w-10 h-10 object-contain" />;
     } else if (page.icon.type === "file" && page.icon.file?.url) {
       iconElement = <img src={page.icon.file.url} alt="icon" className="w-10 h-10 object-contain" />;
+    } else if (page.icon.type === "icon") {
+      iconElement = (
+        <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <Database className="w-6 h-6" />
+        </div>
+      );
     }
+  } else if (page.isDatabase) {
+    iconElement = (
+      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20">
+        <Database className="w-6 h-6" />
+      </div>
+    );
   }
 
   // Determine prev/next page in workspace tree
@@ -233,7 +247,11 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
         {/* Center Content Canvas */}
         <main
           className={`flex-1 min-w-0 px-4 sm:px-8 md:px-12 py-8 lg:py-12 mx-auto transition-all duration-300 ${
-            isFocusMode ? "max-w-3xl" : "max-w-4xl"
+            isFocusMode
+              ? "max-w-4xl"
+              : page.isDatabase
+              ? "max-w-5xl"
+              : "max-w-4xl"
           }`}
         >
           {/* Optional Page Cover Image */}
@@ -277,9 +295,16 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
           <div className="mb-8" dir={activeDirection}>
             {iconElement && <div className="mb-4">{iconElement}</div>}
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-zinc-950 dark:text-zinc-50 leading-[1.15]">
-              {page.title}
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-zinc-950 dark:text-zinc-50 leading-[1.15]">
+                {page.title}
+              </h1>
+              {page.isDatabase && (
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                  Database
+                </span>
+              )}
+            </div>
 
             {/* Metadata bar */}
             <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 pt-3 border-t border-zinc-200/60 dark:border-zinc-800/60">
@@ -288,15 +313,24 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
                 <span>Updated {formatNotionDate(page.last_edited_time)}</span>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                <span>~{readingTime} min read ({totalWords} words)</span>
-              </div>
+              {page.isDatabase ? (
+                <div className="flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>{page.databaseRows?.length || 0} catalog services</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>~{readingTime} min read ({totalWords} words)</span>
+                  </div>
 
-              <div className="flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-indigo-500" />
-                <span>{blocks.length} Notion blocks</span>
-              </div>
+                  <div className="flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{blocks.length} Notion blocks</span>
+                  </div>
+                </>
+              )}
 
               {/* Action Buttons */}
               <div className="ml-auto flex items-center gap-2">
@@ -333,10 +367,14 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
             </div>
           </div>
 
-          {/* Rendered Notion Blocks Container */}
-          <article className={`prose-container ${fontSizeClass}`} dir={activeDirection}>
-            <NotionBlockRenderer blocks={blocks} />
-          </article>
+          {/* Render Database View OR Notion Blocks */}
+          {page.isDatabase ? (
+            <DatabaseView page={page} />
+          ) : (
+            <article className={`prose-container ${fontSizeClass}`} dir={activeDirection}>
+              <NotionBlockRenderer blocks={blocks} />
+            </article>
+          )}
 
           {/* Feedback Rating Widget */}
           <FeedbackWidget pageTitle={page.title} />
@@ -387,8 +425,8 @@ export function DocViewer({ initialPage, initialBlocks, tree }: DocViewerProps) 
           </div>
         </main>
 
-        {/* Right Sidebar: Table of Contents (Hidden in Focus Mode) */}
-        {!isFocusMode && (
+        {/* Right Sidebar: Table of Contents (Hidden in Focus Mode or Database pages) */}
+        {!isFocusMode && !page.isDatabase && (
           <TableOfContents
             items={tocItems}
             readingTime={readingTime}

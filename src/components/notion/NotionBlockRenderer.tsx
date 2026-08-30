@@ -15,9 +15,10 @@ import { DividerBlock } from "./DividerBlock";
 import { ImageBlock } from "./ImageBlock";
 import { BookmarkBlock } from "./BookmarkBlock";
 import { ChildPageCard } from "./ChildPageCard";
+import { ChildDatabaseCard } from "./ChildDatabaseCard";
 import { EquationBlock } from "./EquationBlock";
 import { getPlainTextFromRichText, isRTL } from "@/lib/utils";
-import { File, Video, Music } from "lucide-react";
+import { File, Music } from "lucide-react";
 
 interface NotionBlockRendererProps {
   blocks: NotionBlock[];
@@ -32,12 +33,10 @@ export function NotionBlockRenderer({ blocks }: NotionBlockRendererProps) {
     );
   }
 
-  // Helper to render nested children recursively
   const renderChildren = (childBlocks: NotionBlock[]) => {
     return <NotionBlockRenderer blocks={childBlocks} />;
   };
 
-  // Group adjacent list items (bulleted and numbered)
   const renderedElements: React.ReactNode[] = [];
   let currentListType: "bulleted_list_item" | "numbered_list_item" | null = null;
   let currentListGroup: NotionBlock[] = [];
@@ -79,7 +78,6 @@ export function NotionBlockRenderer({ blocks }: NotionBlockRendererProps) {
         if (!data) break;
         const plainText = getPlainTextFromRichText(data.rich_text);
         if (!plainText.trim()) {
-          // Empty paragraph acts as a small breathing space
           renderedElements.push(<div key={block.id} className="h-4" />);
           break;
         }
@@ -158,6 +156,11 @@ export function NotionBlockRenderer({ blocks }: NotionBlockRendererProps) {
 
       case "child_page": {
         renderedElements.push(<ChildPageCard key={block.id} block={block} />);
+        break;
+      }
+
+      case "child_database": {
+        renderedElements.push(<ChildDatabaseCard key={block.id} block={block} />);
         break;
       }
 

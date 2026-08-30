@@ -12,7 +12,7 @@ import {
   FileText,
   Search,
   ExternalLink,
-  Filter,
+  Database,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -23,6 +23,7 @@ interface SidebarProps {
 
 const CATEGORIES = [
   { id: "all", label: "All Docs" },
+  { id: "services", label: "Services" },
   { id: "genesis", label: "Founding" },
   { id: "roadmap", label: "Roadmap" },
   { id: "catalog", label: "Catalog" },
@@ -44,16 +45,34 @@ export function Sidebar({ tree, onOpenSearch, className = "" }: SidebarProps) {
     }));
   };
 
-  // Filter tree nodes if a specific category is selected
   const filteredTree = useMemo(() => {
     if (selectedCategory === "all") return tree;
 
     return tree.map((root) => {
       const filteredChildren = root.children?.filter((child) => {
         const titleLower = child.title.toLowerCase();
-        if (selectedCategory === "genesis") return titleLower.includes("genesis") || titleLower.includes("creative engine");
-        if (selectedCategory === "roadmap") return titleLower.includes("roadmap") || titleLower.includes("خارطة");
-        if (selectedCategory === "catalog") return titleLower.includes("catalog") || titleLower.includes("كتالوج");
+        if (selectedCategory === "services") {
+          return (
+            child.isDatabase ||
+            titleLower.includes("services") ||
+            titleLower.includes("خدمات") ||
+            titleLower.includes("rate card")
+          );
+        }
+        if (selectedCategory === "genesis") {
+          return (
+            titleLower.includes("genesis") ||
+            titleLower.includes("creative engine") ||
+            titleLower.includes("تأسيس") ||
+            titleLower.includes("nawah")
+          );
+        }
+        if (selectedCategory === "roadmap") {
+          return titleLower.includes("roadmap") || titleLower.includes("خارطة");
+        }
+        if (selectedCategory === "catalog") {
+          return titleLower.includes("catalog") || titleLower.includes("كتالوج");
+        }
         return true;
       });
 
@@ -72,7 +91,12 @@ export function Sidebar({ tree, onOpenSearch, className = "" }: SidebarProps) {
     const isExpanded = expandedNodes[cleanId] ?? true;
     const hasChildren = node.children && node.children.length > 0;
 
-    let iconElement = <FileText className="w-4 h-4 text-zinc-400 group-hover:text-indigo-500" />;
+    let iconElement = node.isDatabase ? (
+      <Database className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+    ) : (
+      <FileText className="w-4 h-4 text-zinc-400 group-hover:text-indigo-500 flex-shrink-0" />
+    );
+
     if (node.icon) {
       if (node.icon.type === "emoji") {
         iconElement = <span className="text-sm select-none">{node.icon.emoji}</span>;
@@ -96,6 +120,11 @@ export function Sidebar({ tree, onOpenSearch, className = "" }: SidebarProps) {
             <span className="truncate text-xs md:text-[0.88rem] leading-snug">
               {node.title}
             </span>
+            {node.isDatabase && (
+              <span className="ml-auto mr-1 px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                DB
+              </span>
+            )}
           </Link>
 
           {hasChildren && (
@@ -180,7 +209,7 @@ export function Sidebar({ tree, onOpenSearch, className = "" }: SidebarProps) {
         <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 flex items-center justify-between">
           <span>Knowledge Base & Pages</span>
           <span className="text-[9px] font-mono opacity-70">
-            {filteredTree[0]?.children?.length || 0} pages
+            {filteredTree[0]?.children?.length || 0} items
           </span>
         </div>
         {filteredTree.map((rootNode) => renderNavNode(rootNode))}
